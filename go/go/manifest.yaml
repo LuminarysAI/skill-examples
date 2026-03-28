@@ -1,0 +1,15 @@
+id: go-toolchain
+path: skills/ai.luminarys.go.go-toolchain.skill
+permissions:
+  fs:
+    enabled: true
+    dirs: ["/data:rw"]
+  shell:
+    enabled: true
+    allowlist: ["go **", "gofmt **", "ps **", "kill **", "./**"]
+    allowed_dirs: ["/data"]
+invoke_policy:
+  can_invoke: []
+  can_be_invoked_by: ["*"]
+mcp:
+  mapping: per_method

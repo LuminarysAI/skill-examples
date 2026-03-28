@@ -1,0 +1,15 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "dist/archive.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 1,
+      "exportRuntime": false,
+      "runtime": "incremental"
+    },
+    "debug": {
+      "outFile": "dist/archive-skill.debug.wasm",
+      "debug": true
+    }
+  }
+}

@@ -1,0 +1,15 @@
+id: file-transfer
+path: skills/ai.luminarys.rust.file-transfer.skill
+permissions:
+  fs:
+    enabled: true
+    dirs: ["/data:rw"]
+  file_transfer:
+    enabled: true
+    allowed_nodes: ["*"]
+    local_dirs: ["/data:rw"]
+invoke_policy:
+  can_invoke: []
+  can_be_invoked_by: ["*"]
+mcp:
+  mapping: per_method

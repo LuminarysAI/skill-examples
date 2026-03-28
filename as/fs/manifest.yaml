@@ -1,0 +1,11 @@
+id: fs-skill
+path: skills/ai.luminarys.as.fs.skill
+permissions:
+  fs:
+    enabled: true
+    dirs: ["/data:rw"]
+invoke_policy:
+  can_invoke: []
+  can_be_invoked_by: ["*"]
+mcp:
+  mapping: per_method

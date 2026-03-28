@@ -1,0 +1,9 @@
+id: js-engine
+path: skills/ai.luminarys.go.js-engine.skill
+permissions:
+  fs: { enabled: false }
+invoke_policy:
+  can_invoke: []
+  can_be_invoked_by: ["*"]
+mcp:
+  mapping: per_method

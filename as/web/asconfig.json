@@ -1,0 +1,11 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "dist/web.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 1,
+      "exportRuntime": false,
+      "runtime": "incremental"
+    }
+  }
+}

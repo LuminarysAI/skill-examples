@@ -1,0 +1,15 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "dist/file-transfer.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 1,
+      "exportRuntime": false,
+      "runtime": "incremental"
+    },
+    "debug": {
+      "outFile": "dist/file-transfer-skill.debug.wasm",
+      "debug": true
+    }
+  }
+}

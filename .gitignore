@@ -1,0 +1,22 @@
+# Build artifacts
+**/dist/
+**/build/
+**/target/
+
+# Dependencies
+**/node_modules/
+
+# Generated dispatch code (regenerate with: lmsk generate)
+as/*/assembly/lib.ts
+go/*/main.go
+rust/*/src/lib.rs
+
+# Signed skill packages
+**/*.skill
+**/*.wasm
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

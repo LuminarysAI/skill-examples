@@ -1,0 +1,16 @@
+[package]
+name = "echo-skill"
+version = "1.0.0"
+edition = "2021"
+
+# Compile with:
+#   cargo build --target wasm32-wasip1 --release
+#   # output: target/wasm32-wasip1/release/echo_skill.wasm
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+luminarys-sdk = "0.2.0"
+rmp-serde = "1.3"
+serde = { version = "1", features = ["derive"] }

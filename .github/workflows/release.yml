@@ -1,0 +1,198 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: '1.25'
+  NODE_VERSION: '22'
+  WASI_SDK_VERSION: '32'
+  WASI_SDK_URL: 'https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-32/wasi-sdk-32.0-x86_64-linux.tar.gz'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - name: Set version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # ── Tools ────────────────────────────────────────────────────────────
+
+      - name: Install lmsk
+        run: |
+          LMSK_VERSION=$(curl -s https://api.github.com/repos/LuminarysAI/luminarys/releases/latest | grep tag_name | cut -d'"' -f4)
+          curl -sL "https://github.com/LuminarysAI/luminarys/releases/download/${LMSK_VERSION}/luminarys-${LMSK_VERSION#v}-linux-amd64.tar.gz" | tar xz lmsk
+          chmod +x lmsk
+          sudo mv lmsk /usr/local/bin/
+
+      - name: Generate signing key
+        run: lmsk genkey
+
+      - name: Install WASI SDK
+        run: |
+          curl -sL "${{ env.WASI_SDK_URL }}" | tar xz -C /opt
+          WASI_SDK=$(ls -d /opt/wasi-sdk-* | head -1)
+          echo "CC_wasm32_wasip1=${WASI_SDK}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX_wasm32_wasip1=${WASI_SDK}/bin/clang++" >> "$GITHUB_ENV"
+          echo "AR_wasm32_wasip1=${WASI_SDK}/bin/ar" >> "$GITHUB_ENV"
+          echo "CFLAGS_wasm32_wasip1=--sysroot=${WASI_SDK}/share/wasi-sysroot" >> "$GITHUB_ENV"
+          echo "CXXFLAGS_wasm32_wasip1=--sysroot=${WASI_SDK}/share/wasi-sysroot -fno-exceptions" >> "$GITHUB_ENV"
+
+      # ── Build AS skills ──────────────────────────────────────────────────
+
+      - name: Build AS skills
+        run: |
+          mkdir -p dist/as
+          for dir in as/*/; do
+            name=$(basename "$dir")
+            echo "::group::AS/$name"
+            cd "$dir"
+            npm install --silent
+            if [ -f assembly/skill.ts ]; then
+              lmsk generate -lang as -out assembly .
+            fi
+            npx asc assembly/lib.ts --target release
+            wasm=$(find dist -name '*.wasm' -not -name '*.debug.*' | head -1)
+            if [ -n "$wasm" ]; then
+              lmsk sign "$wasm"
+              mv *.skill ../../dist/as/
+            fi
+            cd ../..
+            echo "::endgroup::"
+          done
+          echo "AS skills built: $(ls dist/as/*.skill 2>/dev/null | wc -l)"
+
+      # ── Build Go skills ──────────────────────────────────────────────────
+
+      - name: Build Go skills
+        run: |
+          mkdir -p dist/go
+          for dir in go/*/; do
+            name=$(basename "$dir")
+            echo "::group::Go/$name"
+            cd "$dir"
+            lmsk generate .
+            GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o "${name}.wasm" .
+            lmsk sign "${name}.wasm"
+            mv *.skill ../../dist/go/
+            cd ../..
+            echo "::endgroup::"
+          done
+          echo "Go skills built: $(ls dist/go/*.skill 2>/dev/null | wc -l)"
+
+      # ── Build Rust skills ────────────────────────────────────────────────
+
+      - name: Build Rust skills
+        run: |
+          mkdir -p dist/rust
+          for dir in rust/*/; do
+            name=$(basename "$dir")
+            echo "::group::Rust/$name"
+            cd "$dir"
+            if [ -f src/skill.rs ]; then
+              lmsk generate -lang rust -out src ./src
+            fi
+            cargo build --target wasm32-wasip1 --release
+            wasm=$(find target/wasm32-wasip1/release -maxdepth 1 -name '*.wasm' | head -1)
+            if [ -n "$wasm" ]; then
+              lmsk sign "$wasm"
+              mv *.skill ../../dist/rust/
+            fi
+            cd ../..
+            echo "::endgroup::"
+          done
+          echo "Rust skills built: $(ls dist/rust/*.skill 2>/dev/null | wc -l)"
+
+      # ── Collect manifests ────────────────────────────────────────────────
+
+      - name: Collect manifests
+        run: |
+          mkdir -p dist/manifests
+          for f in $(find . -name 'manifest.yaml' -not -path './dist/*'); do
+            skill_dir=$(dirname "$f")
+            lang=$(echo "$skill_dir" | cut -d/ -f2)
+            name=$(echo "$skill_dir" | cut -d/ -f3)
+            cp "$f" "dist/manifests/${lang}-${name}.yaml"
+          done
+          echo "Manifests: $(ls dist/manifests/*.yaml 2>/dev/null | wc -l)"
+
+      # ── Package ──────────────────────────────────────────────────────────
+
+      - name: Package archive
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd dist
+          echo "=== AS ===" && ls as/
+          echo "=== Go ===" && ls go/
+          echo "=== Rust ===" && ls rust/
+          echo "=== Manifests ===" && ls manifests/
+          tar -czf "../skill-examples-${VERSION}.tar.gz" as/ go/ rust/ manifests/
+          cd ..
+          echo "artifact=skill-examples-${VERSION}.tar.gz" >> "$GITHUB_OUTPUT"
+        id: package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: ${{ steps.package.outputs.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          body: |
+            ## Skill Examples
+
+            Pre-built skill packages for the [Luminarys](https://luminarys.ai) platform.
+
+            ### Contents
+
+            The archive contains signed `.skill` packages and example deployment manifests:
+
+            ```
+            as/          — AssemblyScript skills
+            go/          — Go skills
+            rust/        — Rust skills
+            manifests/   — Example deployment manifests (YAML)
+            ```
+
+            ### Usage
+
+            1. Download and extract the archive
+            2. Copy `.skill` files to your `skills/` directory
+            3. Copy and adjust manifests from `manifests/` to your config
+            4. Add manifest paths to your `host.yaml`
+
+            Requires [Luminarys](https://github.com/LuminarysAI/luminarys/releases) host runtime.

@@ -1,0 +1,9 @@
+id: python-engine
+path: skills/ai.luminarys.rust.python-engine.skill
+permissions:
+  fs: { enabled: false }
+invoke_policy:
+  can_invoke: []
+  can_be_invoked_by: ["*"]
+mcp:
+  mapping: per_method

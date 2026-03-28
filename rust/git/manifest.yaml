@@ -1,0 +1,15 @@
+id: git-skill
+path: skills/ai.luminarys.rust.git.skill
+permissions:
+  fs:
+    enabled: true
+    dirs: ["/data:rw"]
+  shell:
+    enabled: true
+    allowlist: ["git **"]
+    allowed_dirs: ["/data"]
+invoke_policy:
+  can_invoke: []
+  can_be_invoked_by: ["*"]
+mcp:
+  mapping: per_method
