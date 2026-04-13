@@ -48,7 +48,7 @@ func ModTidy(ctx *sdk.Context, workdir string) (string, error) {
 	res, err := sdk.ShellExec(sdk.ShellExecRequest{
 		Command:   "go mod tidy",
 		Workdir:   workdir,
-		TimeoutMs: 120000,
+		TimeoutMs: 600000,
 	})
 	if err != nil {
 		return "", err
@@ -67,7 +67,7 @@ func Get(ctx *sdk.Context, workdir, pkg string) (string, error) {
 	res, err := sdk.ShellExec(sdk.ShellExecRequest{
 		Command:   "go get " + pkg,
 		Workdir:   workdir,
-		TimeoutMs: 120000,
+		TimeoutMs: 600000,
 	})
 	if err != nil {
 		return "", err
@@ -96,7 +96,7 @@ func Build(ctx *sdk.Context, workdir, output, tags string) (string, error) {
 	res, err := sdk.ShellExec(sdk.ShellExecRequest{
 		Command:   strings.Join(args, " "),
 		Workdir:   workdir,
-		TimeoutMs: 300000,
+		TimeoutMs: 600000,
 	})
 	if err != nil {
 		return "", err
@@ -136,7 +136,7 @@ func Test(ctx *sdk.Context, workdir, pkg, run, verbose, cover string) (string, e
 	res, err := sdk.ShellExec(sdk.ShellExecRequest{
 		Command:   strings.Join(args, " "),
 		Workdir:   workdir,
-		TimeoutMs: 300000,
+		TimeoutMs: 600000,
 	})
 	if err != nil {
 		return "", err
@@ -174,7 +174,7 @@ func Vet(ctx *sdk.Context, workdir string) (string, error) {
 	res, err := sdk.ShellExec(sdk.ShellExecRequest{
 		Command:   "go vet ./...",
 		Workdir:   workdir,
-		TimeoutMs: 120000,
+		TimeoutMs: 600000,
 	})
 	if err != nil {
 		return "", err

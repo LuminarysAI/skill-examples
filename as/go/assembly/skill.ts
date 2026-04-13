@@ -31,7 +31,7 @@ export function modInit(_ctx: Context, workdir: string, module: string): string 
 // @skill:param  workdir required "Project directory"
 // @skill:result "Status message"
 export function modTidy(_ctx: Context, workdir: string): string {
-  const r = goCmd(workdir, "mod tidy", 120000);
+  const r = goCmd(workdir, "mod tidy", 600000);
   if (r.exit_code != 0) throw new Error("go mod tidy failed (exit " + r.exit_code.toString() + "):\n" + r.output);
   return "go mod tidy: ok";
 }
@@ -41,7 +41,7 @@ export function modTidy(_ctx: Context, workdir: string): string {
 // @skill:param  pkg     required "Package to install (e.g. github.com/gin-gonic/gin@latest)"
 // @skill:result "Status message"
 export function get(_ctx: Context, workdir: string, pkg: string): string {
-  const r = goCmd(workdir, "get " + pkg, 120000);
+  const r = goCmd(workdir, "get " + pkg, 600000);
   if (r.exit_code != 0) throw new Error("go get failed (exit " + r.exit_code.toString() + "):\n" + r.output);
   return "installed: " + pkg;
 }
@@ -56,7 +56,7 @@ export function build(_ctx: Context, workdir: string, output: string, tags: stri
   if (tags.length > 0) args += " -tags " + tags;
   if (output.length > 0) args += " -o " + output;
   args += " .";
-  const r = goCmd(workdir, args, 300000);
+  const r = goCmd(workdir, args, 600000);
   if (r.exit_code != 0) throw new Error("build failed (exit " + r.exit_code.toString() + "):\n" + r.output);
   return output.length > 0 ? "build ok: " + output : "build ok";
 }
@@ -74,7 +74,7 @@ export function test(_ctx: Context, workdir: string, pkg: string, run: string, v
   if (cover == "true") args += " -cover";
   if (run.length > 0) args += " -run " + run;
   args += " " + (pkg.length > 0 ? pkg : "./...");
-  const r = goCmd(workdir, args, 300000);
+  const r = goCmd(workdir, args, 600000);
   if (r.exit_code != 0) return "TESTS FAILED (exit " + r.exit_code.toString() + "):\n" + r.output;
   return r.output;
 }
@@ -92,7 +92,7 @@ export function fmt(_ctx: Context, workdir: string): string {
 // @skill:param  workdir required "Project directory"
 // @skill:result "Vet status"
 export function vet(_ctx: Context, workdir: string): string {
-  const r = goCmd(workdir, "vet ./...", 120000);
+  const r = goCmd(workdir, "vet ./...", 600000);
   if (r.exit_code != 0) throw new Error("go vet found issues (exit " + r.exit_code.toString() + "):\n" + r.output);
   return "go vet: ok";
 }
