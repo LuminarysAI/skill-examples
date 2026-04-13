@@ -128,7 +128,7 @@ pub fn append_line(_ctx: &mut Context, path: String, line: String) -> Result<Str
 /// @skill:method edit "Replace an exact string in a file with new text. Fails if old_string is not found or is ambiguous."
 /// @skill:param  path        required "Absolute path to the file" example:src/main.rs
 /// @skill:param  old_string  required "The exact text to replace, including surrounding context. Must match exactly once unless replace_all is true. Use empty string to create a new file."
-/// @skill:param  new_string  required "The replacement text. Use empty string to delete old_string."
+/// @skill:param  new_string  optional "The replacement text. Empty string deletes old_string."
 /// @skill:param  replace_all optional "Replace every occurrence of old_string instead of requiring a unique match." default:false
 /// @skill:result "Unified diff of the change, or an error describing why the edit failed"
 pub fn edit_file(
