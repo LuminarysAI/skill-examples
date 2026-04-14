@@ -14,7 +14,14 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/token"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -245,4 +252,197 @@ func Kill(ctx *sdk.Context, pid, signal string) (string, error) {
 		return "", fmt.Errorf("kill failed (exit %d): %s", res.ExitCode, res.Output)
 	}
 	return fmt.Sprintf("signal sent to pid %d", pidNum), nil
+}
+
+// ── API surface extraction ────────────────────────────────────────────────────
+
+// @skill:method symbols "Extract API surface (types, functions, methods) from Go files with doc comments. Skips function bodies. Efficient alternative to reading full source when you need to understand what a package exposes."
+// @skill:param  workdir  required "Absolute path to the directory containing .go files"
+// @skill:param  files    optional "Comma-separated file names (e.g. 'auth.go,db.go'). Empty = all .go files in workdir (non-recursive)."
+// @skill:param  filter   optional "Substring filter for symbol names (case-sensitive). Empty = all exported symbols."
+// @skill:param  include_unexported optional "Include unexported (lowercase) symbols as well. Default false."
+// @skill:result "Formatted signatures grouped by file, with leading doc comments."
+func Symbols(_ *sdk.Context, workdir, files, filter string, includeUnexported bool) (string, error) {
+	if workdir == "" {
+		return "", fmt.Errorf("workdir is required")
+	}
+
+	// Resolve file list.
+	var paths []string
+	if files != "" {
+		for _, f := range strings.Split(files, ",") {
+			f = strings.TrimSpace(f)
+			if f == "" {
+				continue
+			}
+			paths = append(paths, filepath.Join(workdir, f))
+		}
+	} else {
+		entries, err := sdk.FsGlob(sdk.GlobOptions{
+			Patterns:  []string{"*.go"},
+			Path:      workdir,
+			OnlyFiles: true,
+		})
+		if err != nil {
+			return "", fmt.Errorf("list files: %w", err)
+		}
+		for _, e := range entries {
+			paths = append(paths, e.Path)
+		}
+	}
+	sort.Strings(paths)
+
+	if len(paths) == 0 {
+		return "(no .go files found)", nil
+	}
+
+	fset := token.NewFileSet()
+	var out strings.Builder
+
+	for _, path := range paths {
+		// Skip test files unless explicitly requested.
+		base := filepath.Base(path)
+		if strings.HasSuffix(base, "_test.go") && !strings.Contains(files, base) {
+			continue
+		}
+
+		data, err := sdk.FsRead(path)
+		if err != nil {
+			fmt.Fprintf(&out, "// %s: read error: %v\n\n", base, err)
+			continue
+		}
+
+		file, err := parser.ParseFile(fset, path, data, parser.ParseComments)
+		if err != nil {
+			fmt.Fprintf(&out, "// %s: parse error: %v\n\n", base, err)
+			continue
+		}
+
+		var fileOut strings.Builder
+		for _, decl := range file.Decls {
+			if s := formatDecl(fset, decl, filter, includeUnexported); s != "" {
+				fileOut.WriteString(s)
+				fileOut.WriteString("\n")
+			}
+		}
+
+		if fileOut.Len() > 0 {
+			fmt.Fprintf(&out, "// %s\n", base)
+			if file.Name != nil {
+				fmt.Fprintf(&out, "package %s\n\n", file.Name.Name)
+			}
+			out.WriteString(fileOut.String())
+			out.WriteString("\n")
+		}
+	}
+
+	if out.Len() == 0 {
+		return "(no matching symbols)", nil
+	}
+	return strings.TrimRight(out.String(), "\n"), nil
+}
+
+// formatDecl renders one top-level declaration as a signature with its doc comment.
+// Returns empty string if the decl is filtered out.
+func formatDecl(fset *token.FileSet, decl ast.Decl, filter string, includeUnexported bool) string {
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		if d.Name == nil {
+			return ""
+		}
+		if !includeUnexported && !d.Name.IsExported() {
+			return ""
+		}
+		if filter != "" && !strings.Contains(d.Name.Name, filter) {
+			return ""
+		}
+		var buf bytes.Buffer
+		writeDoc(&buf, d.Doc)
+		// Print function signature without body.
+		stub := &ast.FuncDecl{
+			Doc:  nil,
+			Recv: d.Recv,
+			Name: d.Name,
+			Type: d.Type,
+			Body: nil,
+		}
+		_ = printer.Fprint(&buf, fset, stub)
+		buf.WriteString("\n")
+		return buf.String()
+
+	case *ast.GenDecl:
+		// type, const, var
+		var buf bytes.Buffer
+		for _, spec := range d.Specs {
+			switch s := spec.(type) {
+			case *ast.TypeSpec:
+				if !includeUnexported && !s.Name.IsExported() {
+					continue
+				}
+				if filter != "" && !strings.Contains(s.Name.Name, filter) {
+					continue
+				}
+				writeDoc(&buf, firstNonNilDoc(d.Doc, s.Doc))
+				fmt.Fprintf(&buf, "type %s ", s.Name.Name)
+				if s.TypeParams != nil {
+					_ = printer.Fprint(&buf, fset, s.TypeParams)
+				}
+				_ = printer.Fprint(&buf, fset, s.Type)
+				buf.WriteString("\n")
+			case *ast.ValueSpec:
+				// const / var
+				exported := false
+				var names []string
+				for _, n := range s.Names {
+					if n.IsExported() {
+						exported = true
+					}
+					if filter == "" || strings.Contains(n.Name, filter) {
+						names = append(names, n.Name)
+					}
+				}
+				if (!exported && !includeUnexported) || len(names) == 0 {
+					continue
+				}
+				writeDoc(&buf, firstNonNilDoc(d.Doc, s.Doc))
+				kind := "var"
+				if d.Tok == token.CONST {
+					kind = "const"
+				}
+				fmt.Fprintf(&buf, "%s %s", kind, strings.Join(names, ", "))
+				if s.Type != nil {
+					buf.WriteString(" ")
+					_ = printer.Fprint(&buf, fset, s.Type)
+				}
+				if len(s.Values) > 0 && d.Tok == token.CONST {
+					buf.WriteString(" = ")
+					for i, v := range s.Values {
+						if i > 0 {
+							buf.WriteString(", ")
+						}
+						_ = printer.Fprint(&buf, fset, v)
+					}
+				}
+				buf.WriteString("\n")
+			}
+		}
+		return buf.String()
+	}
+	return ""
+}
+
+// writeDoc prints a doc comment group with the standard "// " prefix preserved.
+func writeDoc(buf *bytes.Buffer, doc *ast.CommentGroup) {
+	if doc == nil {
+		return
+	}
+	buf.WriteString(doc.Text())
+}
+
+// firstNonNilDoc returns the first non-nil doc comment.
+func firstNonNilDoc(a, b *ast.CommentGroup) *ast.CommentGroup {
+	if a != nil {
+		return a
+	}
+	return b
 }
