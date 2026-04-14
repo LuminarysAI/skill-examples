@@ -287,7 +287,11 @@ func Symbols(_ *sdk.Context, workdir, files, filter string, includeUnexported bo
 			return "", fmt.Errorf("list files: %w", err)
 		}
 		for _, e := range entries {
-			paths = append(paths, e.Path)
+			p := e.Path
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(workdir, p)
+			}
+			paths = append(paths, p)
 		}
 	}
 	sort.Strings(paths)
